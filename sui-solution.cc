@@ -4,6 +4,7 @@
 #include <set>
 #include <map>
 #include <algorithm>
+#include <memory>
 using namespace std;
 
 struct stateInfo {
@@ -20,24 +21,26 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 	// variables
 	deque<shared_ptr<SearchState>> DFSopen;
 	set<shared_ptr<SearchState>> DFSclosed;
-	map<shared_ptr<SearchState>,stateInfo> statesMap; // actual state > parent + action
+	map<shared_ptr<SearchState>,stateInfo> statesMap;
 	stateInfo info;
 
 	// initial state initialization
-	DFSopen.push_back(make_shared<SearchState>(init_state));
+	shared_ptr<SearchState> init = make_shared<SearchState>(init_state);
+	DFSopen.push_back(init);
 	stateInfo initial = {nullptr, nullptr, 0};
-	statesMap.insert(make_pair(make_shared<SearchState>(init_state), initial));
+	statesMap.emplace(init, initial);
 
 	if (DFSopen.empty()) return {};
 	while (!DFSopen.empty() && !DFSopen.back().get()->isFinal()) {
 		//TODO depth check
 		int actDepth;
-		if (statesMap.find(DFSopen.back()) == statesMap.end()) {
+			if (statesMap.find(DFSopen.back()) == statesMap.end()) {
 			// invalid
 			return {};
 		} else {
 			actDepth = statesMap[DFSopen.back()].depth;
 		}
+
 		if (actDepth < depth_limit_) {
 			shared_ptr<SearchState> actState = DFSopen.back();
 			DFSclosed.insert(actState);
@@ -54,23 +57,24 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 			for (auto &move : currAct) {
 				SearchState newState = move.execute(*(actState.get()));
 				// check if newState should be in stack (is not in open or closed)
-				auto itr = DFSclosed.find(make_shared<SearchState>(newState));
+				shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
+				auto itr = DFSclosed.find(newStatePtr);
 				if(itr != DFSclosed.end()) {
 					// state was found in closed
 					continue;
 				}
-				auto itr2 = find(DFSopen.begin(), DFSopen.end(), make_shared<SearchState>(newState));
+				auto itr2 = find(DFSopen.begin(), DFSopen.end(), newStatePtr);
 				if(itr2 != DFSopen.end()) {
 					// state was found in open
 					continue;
 				}
 
 				// push the new state
-				DFSopen.push_back(make_shared<SearchState>(newState));
+				DFSopen.push_back(newStatePtr);
 				// save the parent and action of new state
 				
 				info = {actState, make_shared<SearchAction>(move), newStateDepth};
-				statesMap.emplace(make_shared<SearchState>(newState), info);
+				statesMap.emplace(newStatePtr, info);
 			}
 		} else {
 			DFSopen.pop_back();
