@@ -4,7 +4,7 @@
 #include <set>
 #include <map>
 #include <algorithm>
-#include <memory>
+#include "memusage.h"
 using namespace std;
 
 struct stateInfo {
@@ -13,14 +13,100 @@ struct stateInfo {
 	int depth;
 };
 
+struct stateInfoBFS {
+	shared_ptr<SearchState> parent;
+	shared_ptr<SearchAction> action;
+};
+
+bool operator==(const SearchState &a, const SearchState &b) {
+    return a.state_ == b.state_;
+}
+
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state) {
+	// variables
+	deque<shared_ptr<SearchState>> BFSopen;
+	set<shared_ptr<SearchState>> BFSclosed;
+	map<shared_ptr<SearchState>,stateInfoBFS> statesMap;
+	stateInfoBFS info;
+
+	// initial state initialization
+	shared_ptr<SearchState> init = make_shared<SearchState>(init_state);
+	BFSopen.push_front(init);
+	stateInfoBFS initial = {nullptr, nullptr};
+	statesMap.emplace(init, initial);
+
+	if (BFSopen.empty()) return {};
+	while (!BFSopen.empty() && !BFSopen.back().get()->isFinal()) {
+		printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
+		if (statesMap.find(BFSopen.back()) == statesMap.end()) {
+			// invalid
+			return {};
+		}
+		shared_ptr<SearchState> actState = BFSopen.back();
+		BFSclosed.insert(actState);
+		BFSopen.pop_back();
+		// expand and push new states
+		vector<SearchAction> currAct = actState.get()->actions();
+		if (statesMap.find(actState) == statesMap.end()) {
+			// invalid
+			return {};
+		}
+		for (auto &move : currAct) {
+			SearchState newState = move.execute(*(actState.get()));
+			// check if newState should be in stack (is not in open or closed)
+			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
+			auto itr = BFSclosed.find(newStatePtr);
+			if(itr != BFSclosed.end()) {
+				// state was found in closed
+				continue;
+			}
+			auto itr2 = find(BFSopen.begin(), BFSopen.end(), newStatePtr);
+			if(itr2 != BFSopen.end()) {
+				// state was found in open
+				continue;
+			}
+
+			// push the new state
+			BFSopen.push_front(newStatePtr);
+			// save the parent and action of new state
+			
+			info = {actState, make_shared<SearchAction>(move)};
+			statesMap.emplace(newStatePtr, info);
+		}
+	}
+
+	if (BFSopen.empty()) {
+		return {};
+	} else if (BFSopen.back().get()->isFinal()) {
+		vector<SearchAction> finalActions;
+		// get vector of actions that led to the final state
+		shared_ptr<SearchState> state = BFSopen.back();
+
+		while (true) {
+			if (statesMap.find(state) == statesMap.end()) {
+				// invalid
+				return {};
+			} else {
+				if (statesMap[state].action == nullptr) {
+					// the initial state
+					return finalActions;
+				} else {
+					// insert the next action to the beginning of the vector
+					finalActions.push_back(*(statesMap[state].action.get()));
+					rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
+					state = statesMap[state].parent;
+				}
+			}
+		}
+
+	}
 	return {};
 }
 
 std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state) {
 	// variables
 	deque<shared_ptr<SearchState>> DFSopen;
-	set<shared_ptr<SearchState>> DFSclosed;
+	set<SearchState> DFSclosed;
 	map<shared_ptr<SearchState>,stateInfo> statesMap;
 	stateInfo info;
 
@@ -43,7 +129,7 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 
 		if (actDepth < depth_limit_) {
 			shared_ptr<SearchState> actState = DFSopen.back();
-			DFSclosed.insert(actState);
+			DFSclosed.insert(*(actState.get()));
 			DFSopen.pop_back();
 			// expand and push new states
 			vector<SearchAction> currAct = actState.get()->actions();
@@ -58,14 +144,25 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 				SearchState newState = move.execute(*(actState.get()));
 				// check if newState should be in stack (is not in open or closed)
 				shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
-				auto itr = DFSclosed.find(newStatePtr);
+				auto itr = DFSclosed.find(newState);
 				if(itr != DFSclosed.end()) {
 					// state was found in closed
 					continue;
 				}
-				auto itr2 = find(DFSopen.begin(), DFSopen.end(), newStatePtr);
-				if(itr2 != DFSopen.end()) {
-					// state was found in open
+				// auto itr2 = find(DFSopen.begin(), DFSopen.end(), newStatePtr);
+				// if(itr2 != DFSopen.end()) {
+				// 	// state was found in open
+				// 	continue;
+				// }
+
+				bool openFound = false;
+				for (auto &stateCheck : DFSopen) {
+					if (operator==(*(stateCheck.get()), newState)) {
+						openFound = true; // TODO fix this - padne to sem hned napoprve
+						break;
+					}
+				}
+				if (openFound) {
 					continue;
 				}
 
@@ -81,32 +178,26 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 		}
 	}
 
+	vector<SearchAction> finalActions;
 	if (DFSopen.empty()) {
 		return {};
 	} else if (DFSopen.back().get()->isFinal()) {
-		vector<SearchAction> finalActions;
 		// get vector of actions that led to the final state
 		shared_ptr<SearchState> state = DFSopen.back();
 
-		while (true) {
+		while (statesMap[state].action != nullptr) {
 			if (statesMap.find(state) == statesMap.end()) {
 				// invalid
 				return {};
 			} else {
-				if (statesMap[state].action == nullptr) {
-					// the initial state
-					return finalActions;
-				} else {
-					// insert the next action to the beginning of the vector
-					finalActions.push_back(*(statesMap[state].action.get()));
-					rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
-					state = statesMap[state].parent;
-				}
+				// insert the next action to the beginning of the vector
+				finalActions.push_back(*(statesMap[state].action.get()));
+				rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
+				state = statesMap[state].parent;
 			}
 		}
-
 	}
-	return {};
+	return finalActions;
 }
 
 double StudentHeuristic::distanceLowerBound(const GameState &state) const {
