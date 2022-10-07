@@ -36,7 +36,7 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 	statesMap.emplace(init, initial);
 
 	if (BFSopen.empty()) return {};
-	while (!BFSopen.empty() && !BFSopen.back().get()->isFinal()) {
+	while (!BFSopen.empty() && !BFSopen.back()->isFinal()) {
 		printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 		if (statesMap.find(BFSopen.back()) == statesMap.end()) {
 			// invalid
@@ -46,13 +46,13 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 		BFSclosed.insert(actState);
 		BFSopen.pop_back();
 		// expand and push new states
-		vector<SearchAction> currAct = actState.get()->actions();
+		vector<SearchAction> currAct = actState->actions();
 		if (statesMap.find(actState) == statesMap.end()) {
 			// invalid
 			return {};
 		}
-		for (auto &move : currAct) {
-			SearchState newState = move.execute(*(actState.get()));
+		for (auto &gameMove : currAct) {
+			SearchState newState = gameMove.execute(*actState);
 			// check if newState should be in stack (is not in open or closed)
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
 			auto itr = BFSclosed.find(newStatePtr);
@@ -70,14 +70,14 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 			BFSopen.push_front(newStatePtr);
 			// save the parent and action of new state
 			
-			info = {actState, make_shared<SearchAction>(move)};
+			info = {actState, make_shared<SearchAction>(gameMove)};
 			statesMap.emplace(newStatePtr, info);
 		}
 	}
 
 	if (BFSopen.empty()) {
 		return {};
-	} else if (BFSopen.back().get()->isFinal()) {
+	} else if (BFSopen.back()->isFinal()) {
 		vector<SearchAction> finalActions;
 		// get vector of actions that led to the final state
 		shared_ptr<SearchState> state = BFSopen.back();
@@ -87,14 +87,14 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 				// invalid
 				return {};
 			} else {
-				if (statesMap[state].action == nullptr) {
+				if (statesMap.at(state).action == nullptr) {
 					// the initial state
 					return finalActions;
 				} else {
 					// insert the next action to the beginning of the vector
-					finalActions.push_back(*(statesMap[state].action.get()));
+					finalActions.push_back(*(statesMap.at(state).action));
 					rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
-					state = statesMap[state].parent;
+					state = statesMap.at(state).parent;
 				}
 			}
 		}
@@ -117,60 +117,37 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 	statesMap.emplace(init, initial);
 
 	if (DFSopen.empty()) return {};
-	while (!DFSopen.empty() && !DFSopen.back().get()->isFinal()) {
-		//TODO depth check
-		int actDepth;
-			if (statesMap.find(DFSopen.back()) == statesMap.end()) {
-			// invalid
-			return {};
-		} else {
-			actDepth = statesMap[DFSopen.back()].depth;
-		}
-
+	shared_ptr<SearchState> actState;
+	while (!DFSopen.empty() && !DFSopen.back()->isFinal()) {
+		if ((getCurrentRSS() + 300000) >= mem_limit_) return {};
+		if (statesMap.count(DFSopen.back()) == 0) return {};
+		int actDepth = statesMap.at(DFSopen.back()).depth;
 		if (actDepth < depth_limit_) {
-			shared_ptr<SearchState> actState = DFSopen.back();
-			DFSclosed.insert(*(actState.get()));
+			actState = DFSopen.back();
+			if (DFSclosed.find(*actState) != DFSclosed.end()) {
+				DFSopen.pop_back();
+				continue;
+			}
+			DFSclosed.insert(*actState);
 			DFSopen.pop_back();
 			// expand and push new states
-			vector<SearchAction> currAct = actState.get()->actions();
-			int newStateDepth;
-			if (statesMap.find(actState) == statesMap.end()) {
+			vector<SearchAction> currAct = actState->actions();
+			int newStateDepth = 0;
+			if (statesMap.count(actState) == 0) {
 				// invalid
+				cout << "invalid" << endl;
 				return {};
 			} else {
-				newStateDepth = statesMap[actState].depth + 1;
+				newStateDepth = statesMap.at(actState).depth + 1;
 			}
-			for (auto &move : currAct) {
-				SearchState newState = move.execute(*(actState.get()));
+			for (auto &gameMove : currAct) {
+				SearchState newState = move(gameMove.execute(*actState));
 				// check if newState should be in stack (is not in open or closed)
 				shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
-				auto itr = DFSclosed.find(newState);
-				if(itr != DFSclosed.end()) {
-					// state was found in closed
-					continue;
-				}
-				// auto itr2 = find(DFSopen.begin(), DFSopen.end(), newStatePtr);
-				// if(itr2 != DFSopen.end()) {
-				// 	// state was found in open
-				// 	continue;
-				// }
+				if(DFSclosed.find(*newStatePtr) != DFSclosed.end()) continue; // state found in CLOSED
 
-				bool openFound = false;
-				for (auto &stateCheck : DFSopen) {
-					if (operator==(*(stateCheck.get()), newState)) {
-						openFound = true; // TODO fix this - padne to sem hned napoprve
-						break;
-					}
-				}
-				if (openFound) {
-					continue;
-				}
-
-				// push the new state
 				DFSopen.push_back(newStatePtr);
-				// save the parent and action of new state
-				
-				info = {actState, make_shared<SearchAction>(move), newStateDepth};
+				info = {actState, make_shared<SearchAction>(gameMove), newStateDepth};
 				statesMap.emplace(newStatePtr, info);
 			}
 		} else {
@@ -181,22 +158,25 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 	vector<SearchAction> finalActions;
 	if (DFSopen.empty()) {
 		return {};
-	} else if (DFSopen.back().get()->isFinal()) {
+	} else if (DFSopen.back()->isFinal()) {
 		// get vector of actions that led to the final state
 		shared_ptr<SearchState> state = DFSopen.back();
 
-		while (statesMap[state].action != nullptr) {
+		while (statesMap.at(state).action != nullptr) {
 			if (statesMap.find(state) == statesMap.end()) {
 				// invalid
 				return {};
 			} else {
 				// insert the next action to the beginning of the vector
-				finalActions.push_back(*(statesMap[state].action.get()));
+				finalActions.push_back(*(statesMap.at(state).action));
 				rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
-				state = statesMap[state].parent;
+				state = statesMap.at(state).parent;
 			}
 		}
 	}
+	statesMap.clear();
+	DFSclosed.clear();
+	DFSopen.clear();
 	return finalActions;
 }
 
