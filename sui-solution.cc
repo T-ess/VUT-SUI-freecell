@@ -19,7 +19,7 @@ struct stateInfoBFS {
 };
 
 bool operator==(const SearchState &a, const SearchState &b) {
-    return a.state_ == b.state_;
+	return a.state_ == b.state_;
 }
 
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state) {
@@ -37,7 +37,7 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 
 	if (BFSopen.empty()) return {};
 	while (!BFSopen.empty() && !BFSopen.back().get()->isFinal()) {
-		printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
+		//printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 		if (statesMap.find(BFSopen.back()) == statesMap.end()) {
 			// invalid
 			return {};
@@ -60,12 +60,23 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 				// state was found in closed
 				continue;
 			}
-			auto itr2 = find(BFSopen.begin(), BFSopen.end(), newStatePtr);
-			if(itr2 != BFSopen.end()) {
-				// state was found in open
-				continue;
+			// auto itr2 = find(BFSopen.begin(), BFSopen.end(), newStatePtr);
+			// if(itr2 != BFSopen.end()) {
+			// 	// state was found in open
+			// 	continue;
+			// }
+
+			bool openFound = false;
+			for (auto &stateCheck : BFSopen) {
+				if (operator==(*(stateCheck.get()), newState)) {
+					openFound = true; // TODO fix this - padne to sem hned napoprve
+					break;
+				}
 			}
 
+			if (openFound) {
+				continue;
+			}
 			// push the new state
 			BFSopen.push_front(newStatePtr);
 			// save the parent and action of new state
@@ -129,7 +140,22 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 
 		if (actDepth < depth_limit_) {
 			shared_ptr<SearchState> actState = DFSopen.back();
-			DFSclosed.insert(*(actState.get()));
+			//state found in closed
+			// auto actInClosed = false;
+			// for (auto &stateCheck : DFSclosed) {
+			// 	if (operator==(stateCheck, *(actState.get()))) {			
+			// 		actInClosed = true;
+			// 		break;
+			// 	}
+			// }
+
+			// if (actInClosed){
+			// 	actInClosed = false;
+			// 	DFSopen.pop_back();
+			// 	continue;
+			// }
+
+			//DFSclosed.insert(*(actState.get()));
 			DFSopen.pop_back();
 			// expand and push new states
 			vector<SearchAction> currAct = actState.get()->actions();
@@ -144,11 +170,11 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 				SearchState newState = move.execute(*(actState.get()));
 				// check if newState should be in stack (is not in open or closed)
 				shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
-				auto itr = DFSclosed.find(newState);
-				if(itr != DFSclosed.end()) {
-					// state was found in closed
-					continue;
-				}
+				// auto itr = DFSclosed.find(newState);
+				// if(itr != DFSclosed.end()) {
+				// 	// state was found in closed
+				// 	continue;
+				// }
 				// auto itr2 = find(DFSopen.begin(), DFSopen.end(), newStatePtr);
 				// if(itr2 != DFSopen.end()) {
 				// 	// state was found in open
@@ -163,6 +189,12 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 					}
 				}
 				if (openFound) {
+					openFound = false;
+					continue;
+				}
+
+
+				if (statesMap[actState].parent != nullptr && operator==(*(statesMap[actState].parent.get()), newState)){
 					continue;
 				}
 
