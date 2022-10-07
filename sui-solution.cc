@@ -18,87 +18,55 @@ struct stateInfoBFS {
 	shared_ptr<SearchAction> action;
 };
 
-bool operator==(const SearchState &a, const SearchState &b) {
-    return a.state_ == b.state_;
-}
-
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state) {
-	// variables
+// variables
 	deque<shared_ptr<SearchState>> BFSopen;
-	set<shared_ptr<SearchState>> BFSclosed;
+	set<SearchState> BFSclosed;
 	map<shared_ptr<SearchState>,stateInfoBFS> statesMap;
 	stateInfoBFS info;
 
-	// initial state initialization
+	// initial state
 	shared_ptr<SearchState> init = make_shared<SearchState>(init_state);
 	BFSopen.push_front(init);
 	stateInfoBFS initial = {nullptr, nullptr};
 	statesMap.emplace(init, initial);
 
 	if (BFSopen.empty()) return {};
+	shared_ptr<SearchState> actState;
 	while (!BFSopen.empty() && !BFSopen.back()->isFinal()) {
-		printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
-		if (statesMap.find(BFSopen.back()) == statesMap.end()) {
-			// invalid
-			return {};
+		if ((getCurrentRSS() + 300000) >= mem_limit_) return {}; // memory check
+		if (statesMap.count(BFSopen.back()) == 0) return {}; // current state is not in statesMap
+		actState = BFSopen.back();
+		if (BFSclosed.find(*actState) != BFSclosed.end()) { // current state already visited
+			BFSopen.pop_back();
+			continue;
 		}
-		shared_ptr<SearchState> actState = BFSopen.back();
-		BFSclosed.insert(actState);
+		BFSclosed.insert(*actState);
 		BFSopen.pop_back();
-		// expand and push new states
+		// expand current state and push new states
 		vector<SearchAction> currAct = actState->actions();
-		if (statesMap.find(actState) == statesMap.end()) {
-			// invalid
-			return {};
-		}
 		for (auto &gameMove : currAct) {
-			SearchState newState = gameMove.execute(*actState);
-			// check if newState should be in stack (is not in open or closed)
+			SearchState newState = move(gameMove.execute(*actState));
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
-			auto itr = BFSclosed.find(newStatePtr);
-			if(itr != BFSclosed.end()) {
-				// state was found in closed
-				continue;
-			}
-			auto itr2 = find(BFSopen.begin(), BFSopen.end(), newStatePtr);
-			if(itr2 != BFSopen.end()) {
-				// state was found in open
-				continue;
-			}
-
-			// push the new state
+			if(BFSclosed.find(*newStatePtr) != BFSclosed.end()) continue; // state found in CLOSED
 			BFSopen.push_front(newStatePtr);
-			// save the parent and action of new state
-			
 			info = {actState, make_shared<SearchAction>(gameMove)};
 			statesMap.emplace(newStatePtr, info);
 		}
 	}
-
-	if (BFSopen.empty()) {
-		return {};
-	} else if (BFSopen.back()->isFinal()) {
-		vector<SearchAction> finalActions;
+	// retrace steps and get actions
+	vector<SearchAction> finalActions;
+	if (!BFSopen.empty() && BFSopen.back()->isFinal()) {
 		// get vector of actions that led to the final state
 		shared_ptr<SearchState> state = BFSopen.back();
-
-		while (true) {
-			if (statesMap.find(state) == statesMap.end()) {
-				// invalid
-				return {};
-			} else {
-				if (statesMap.at(state).action == nullptr) {
-					// the initial state
-					return finalActions;
-				} else {
-					// insert the next action to the beginning of the vector
-					finalActions.push_back(*(statesMap.at(state).action));
-					rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
-					state = statesMap.at(state).parent;
-				}
-			}
+		while (statesMap.at(state).action != nullptr) {
+			if (statesMap.count(state) == 0) return {};
+			// insert the next action to the beginning of the vector
+			finalActions.push_back(*(statesMap.at(state).action));
+			rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
+			state = statesMap.at(state).parent; // get the next state
 		}
-
+		return finalActions;
 	}
 	return {};
 }
