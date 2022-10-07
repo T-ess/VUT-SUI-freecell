@@ -370,6 +370,10 @@ TEST_CASE("GameState comparisons") {
 	REQUIRE(a == b);
 	REQUIRE_FALSE(a < b);
 	REQUIRE_FALSE(b < a);
+
+	a.free_cells[0].acceptCard({Color::Spade, 1});
+	REQUIRE_FALSE(a == b);
+	REQUIRE(((a < b) || (b < a)));
 }
 
 
@@ -454,4 +458,3 @@ TEST_CASE("Ptr -> location conversion") {
     REQUIRE(locFromPtr(gs, &gs.stacks[2]) == Location{LocationClass::Stacks, 2});
     REQUIRE(locFromPtr(gs, &gs.free_cells[3]) == Location{LocationClass::FreeCells, 3});
 }
-
