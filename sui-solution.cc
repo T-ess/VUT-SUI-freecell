@@ -29,12 +29,16 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 	shared_ptr<SearchState> init = make_shared<SearchState>(init_state);
 	BFSopen.push_front(init);
 	stateInfoBFS initial = {nullptr, nullptr};
-	statesMap.emplace(init, initial);
+	statesMap.emplace(move(init), move(initial));
 
 	if (BFSopen.empty()) return {};
 	shared_ptr<SearchState> actState;
 	while (!BFSopen.empty() && !BFSopen.back()->isFinal()) {
-		if ((getCurrentRSS() + 300000) >= mem_limit_) return {}; // memory check
+		if ((getCurrentRSS() + 300000) >= mem_limit_) {
+			cout << "error" << endl;
+			return {}; // memory check
+		}
+		actState.reset();
 		if (statesMap.count(BFSopen.back()) == 0) return {}; // current state is not in statesMap
 		actState = BFSopen.back();
 		if (BFSclosed.find(*actState) != BFSclosed.end()) { // current state already visited
@@ -46,14 +50,14 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 		// expand current state and push new states
 		vector<SearchAction> currAct = actState->actions();
 		for (auto &gameMove : currAct) {
-			SearchState newState = move(gameMove.execute(*actState));
-			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(newState);
+			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
 			if(BFSclosed.find(*newStatePtr) != BFSclosed.end()) continue; // state found in CLOSED
 			BFSopen.push_front(newStatePtr);
 			info = {actState, make_shared<SearchAction>(gameMove)};
-			statesMap.emplace(newStatePtr, info);
+			statesMap.emplace(move(newStatePtr), move(info));
 		}
 	}
+	actState.reset();
 	// retrace steps and get actions
 	vector<SearchAction> finalActions;
 	if (!BFSopen.empty() && BFSopen.back()->isFinal()) {
@@ -66,6 +70,7 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 			rotate(finalActions.rbegin(), finalActions.rbegin() + 1, finalActions.rend()); // push_front
 			state = statesMap.at(state).parent; // get the next state
 		}
+		cout << "yay" << endl;
 		return finalActions;
 	}
 	return {};
