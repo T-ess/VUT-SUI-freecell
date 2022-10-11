@@ -16,11 +16,11 @@ struct stateInfo {
 struct stateInfoAstar {
 	shared_ptr<SearchState> state;
 	vector<shared_ptr<SearchAction>> actions;
-	double g; //cost
+	double priority;
 
-	bool operator<(const struct stateInfoAstar& other) const {
-	return g < other.g;
-}
+	bool operator>(const struct stateInfoAstar& other) const {
+	return priority > other.priority;
+	}
 };
 
 
@@ -125,13 +125,11 @@ double StudentHeuristic::distanceLowerBound(const GameState &state) const {
 std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 	// variables
 	set<SearchState> Aclosed;
-	priority_queue<stateInfoAstar> Apriority;
-	// g = movement cost from starting state
-	// h = heuristic
-	double g = 0, h;
-	
+	priority_queue<stateInfoAstar, vector<stateInfoAstar>, greater<stateInfoAstar>> Apriority;
+	double movement = 0, heuristic;
+
 	// initial state
-	stateInfoAstar initInfoAstar = {make_shared<SearchState>(init_state), {}, g};
+	stateInfoAstar initInfoAstar = {make_shared<SearchState>(init_state), {}, movement};
 	Apriority.push(move(initInfoAstar)); //priority queue
 
 	if (Apriority.empty()) return {};
@@ -152,14 +150,12 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 				return {}; // memory check
 			}
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
-			
-			h = compute_heuristic(*newStatePtr, *heuristic_); 
-
+			heuristic = compute_heuristic(*newStatePtr, *heuristic_); //calculate heuristic
 			if(Aclosed.find(*newStatePtr) != Aclosed.end()) continue; // state found in CLOSED
 			vector<shared_ptr<SearchAction>> actionPath = actStateActions;
 			actionPath.push_back(make_shared<SearchAction>(gameMove));
-			g = actionPath.size(); //cost of state
-			Apriority.push({move(newStatePtr), move(actionPath), g + h});
+			movement = actionPath.size(); //cost of state
+			Apriority.push({move(newStatePtr), move(actionPath), movement + heuristic});
 		}
 	}
 	vector<SearchAction> finalActions = {};
