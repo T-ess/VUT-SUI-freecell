@@ -1,6 +1,7 @@
 #include "search-strategies.h"
 #include <iostream>
 #include <deque>
+#include <queue>
 #include <set>
 #include <map>
 #include <algorithm>
@@ -11,6 +12,17 @@ struct stateInfo {
 	shared_ptr<SearchState> state;
 	vector<shared_ptr<SearchAction>> actions;
 };
+
+struct stateInfoAstar {
+	shared_ptr<SearchState> state;
+	vector<shared_ptr<SearchAction>> actions;
+	double g; //cost
+
+	bool operator<(const struct stateInfoAstar& other) const {
+	return g < other.g;
+}
+};
+
 
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state) {
 	// variables
@@ -111,5 +123,56 @@ double StudentHeuristic::distanceLowerBound(const GameState &state) const {
 }
 
 std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
+	// variables
+	set<SearchState> Aclosed;
+	priority_queue<stateInfoAstar> Apriority;
+	// g = movement cost from starting state
+	// h = heuristic
+	double g = 0, h;
+	
+	// initial state
+	stateInfoAstar initInfoAstar = {make_shared<SearchState>(init_state), {}, g};
+	Apriority.push(move(initInfoAstar)); //priority queue
+
+	if (Apriority.empty()) return {};
+	while (!Apriority.empty() && !Apriority.top().state->isFinal()) {
+		shared_ptr<SearchState> actState = move(Apriority.top().state);
+		vector<shared_ptr<SearchAction>> actStateActions = move(Apriority.top().actions);
+		if (Aclosed.find(*actState) != Aclosed.end()) { // current state already visited
+			Apriority.pop();
+			continue;
+		}
+		Aclosed.insert(*actState);
+		Apriority.pop();
+		// expand current state and push new states
+		vector<SearchAction> currAct = actState->actions();
+		for (auto &gameMove : currAct) {
+			if ((getCurrentRSS() + 3000000) >= mem_limit_) {
+				cout << "error" << endl;
+				return {}; // memory check
+			}
+			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
+			
+			h = compute_heuristic(*newStatePtr, *heuristic_); 
+
+			if(Aclosed.find(*newStatePtr) != Aclosed.end()) continue; // state found in CLOSED
+			vector<shared_ptr<SearchAction>> actionPath = actStateActions;
+			actionPath.push_back(make_shared<SearchAction>(gameMove));
+			g = actionPath.size(); //cost of state
+			Apriority.push({move(newStatePtr), move(actionPath), g + h});
+		}
+	}
+	vector<SearchAction> finalActions = {};
+	if (!Apriority.empty() && Apriority.top().state->isFinal()) {
+		for (auto &act : Apriority.top().actions) {
+			finalActions.push_back(*act);
+		}
+		cout << "yay" << endl;
+		printf("A_star: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
+		return finalActions;
+	}
+	return {};
+
+
 	return {};
 }
