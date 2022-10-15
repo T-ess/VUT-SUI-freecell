@@ -32,9 +32,9 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 	// initial state
 	stateInfo initInfo = {make_shared<SearchState>(init_state), {}};
 	BFSopen.push_front(move(initInfo));
-
-	if (BFSopen.empty()) return {};
-	while (!BFSopen.empty() && !BFSopen.back().state->isFinal()) {
+	bool found = false;
+	if (BFSopen.front().state->isFinal()) return {};
+	while (!BFSopen.empty()) {
 		shared_ptr<SearchState> actState = move(BFSopen.back().state);
 		vector<shared_ptr<SearchAction>> actStateActions = move(BFSopen.back().actions);
 		if (BFSclosed.find(*actState) != BFSclosed.end()) { // current state already visited
@@ -46,7 +46,7 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 		// expand current state and push new states
 		vector<SearchAction> currAct = actState->actions();
 		for (auto &gameMove : currAct) {
-			if ((getCurrentRSS() + 3000000) >= mem_limit_) {
+			if ((getCurrentRSS() + 1000000) >= mem_limit_) {
 				cout << "error" << endl;
 				return {}; // memory check
 			}
@@ -54,12 +54,17 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 			if(BFSclosed.find(*newStatePtr) != BFSclosed.end()) continue; // state found in CLOSED
 			vector<shared_ptr<SearchAction>> actionPath = actStateActions;
 			actionPath.push_back(make_shared<SearchAction>(gameMove));
-			BFSopen.push_front({move(newStatePtr), move(actionPath)});
+			BFSopen.push_front({newStatePtr, move(actionPath)});
+			if (newStatePtr->isFinal()) {
+				found = true;
+				break;
+			}
 		}
+		if (found) break;
 	}
 	vector<SearchAction> finalActions = {};
-	if (!BFSopen.empty() && BFSopen.back().state->isFinal()) {
-		for (auto &act : BFSopen.back().actions) {
+	if (!BFSopen.empty() && BFSopen.front().state->isFinal()) {
+		for (auto &act : BFSopen.front().actions) {
 			finalActions.push_back(*act);
 		}
 		cout << "yay" << endl;
@@ -77,9 +82,9 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 	// initial state
 	stateInfo initInfo = {make_shared<SearchState>(init_state), {}};
 	DFSopen.push_back(move(initInfo));
-
-	if (DFSopen.empty()) return {};
-	while (!DFSopen.empty() && !DFSopen.back().state->isFinal()) {
+	bool found = false;
+	if (DFSopen.front().state->isFinal()) return {};
+	while (!DFSopen.empty()) {
 		if (DFSopen.back().actions.size() < depth_limit_) {
 			shared_ptr<SearchState> actState = move(DFSopen.back().state);
 			vector<shared_ptr<SearchAction>> actStateActions = move(DFSopen.back().actions);
@@ -92,7 +97,7 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 			// expand current state and push new states
 			vector<SearchAction> currAct = actState->actions();
 			for (auto &gameMove : currAct) {
-				if ((getCurrentRSS() + 3000000) >= mem_limit_) {
+				if ((getCurrentRSS() + 1000000) >= mem_limit_) {
 					cout << "error" << endl;
 					return {}; // memory check
 				}
@@ -100,11 +105,16 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 				if(DFSclosed.find(*newStatePtr) != DFSclosed.end()) continue; // state found in CLOSED
 				vector<shared_ptr<SearchAction>> actionPath = actStateActions;
 				actionPath.push_back(make_shared<SearchAction>(gameMove));
-				DFSopen.push_back({move(newStatePtr), move(actionPath)});
+				DFSopen.push_back({newStatePtr, move(actionPath)});
+				if (newStatePtr->isFinal()) {
+					found = true;
+					break;
+				}
 			}
 		} else {
 			DFSopen.pop_back();
 		}
+		if (found) break;
 	}
 	vector<SearchAction> finalActions = {};
 	if (!DFSopen.empty() && DFSopen.back().state->isFinal()) {
@@ -131,9 +141,9 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 	// initial state
 	stateInfoAstar initInfoAstar = {make_shared<SearchState>(init_state), {}, movement};
 	Apriority.push(move(initInfoAstar)); //priority queue
-
-	if (Apriority.empty()) return {};
-	while (!Apriority.empty() && !Apriority.top().state->isFinal()) {
+	bool found = false;
+	if (Apriority.top().state->isFinal()) return {};
+	while (!Apriority.empty()) {
 		shared_ptr<SearchState> actState = move(Apriority.top().state);
 		vector<shared_ptr<SearchAction>> actStateActions = move(Apriority.top().actions);
 		if (Aclosed.find(*actState) != Aclosed.end()) { // current state already visited
@@ -145,8 +155,9 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 		// expand current state and push new states
 		vector<SearchAction> currAct = actState->actions();
 		for (auto &gameMove : currAct) {
-			if ((getCurrentRSS() + 3000000) >= mem_limit_) {
+			if ((getCurrentRSS() + 1000000) >= mem_limit_) {
 				cout << "error" << endl;
+				printf("A_star: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 				return {}; // memory check
 			}
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
@@ -155,8 +166,13 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 			vector<shared_ptr<SearchAction>> actionPath = actStateActions;
 			actionPath.push_back(make_shared<SearchAction>(gameMove));
 			movement = actionPath.size(); //cost of state
-			Apriority.push({move(newStatePtr), move(actionPath), movement + heuristic});
+			Apriority.push({newStatePtr, move(actionPath), movement + heuristic});
+			if (move(newStatePtr->isFinal())) {
+				found = true;
+				break;
+			}
 		}
+		if (found) break;
 	}
 	vector<SearchAction> finalActions = {};
 	if (!Apriority.empty() && Apriority.top().state->isFinal()) {
