@@ -23,6 +23,81 @@ struct stateInfoAstar {
 	}
 };
 
+double HSDH (const GameState &state) {
+	vector<int> homesCounts = {};
+	bool stackEmpty = false;
+	for (const auto &home : state.homes) {
+		bool found = false;
+		double count = 0;
+		for ( const auto &stack : state.stacks) {
+			count = 0;
+			auto storage = stack.storage();
+			if (!stackEmpty || storage.empty()) stackEmpty = true;
+			for ( const auto &actCard : storage) {
+				count++;
+				if (home.canAccept(actCard)) {
+					found = true;
+					homesCounts.push_back(count-1);
+					break;
+				}
+			}
+			if (found) break;
+		}
+	}
+	double h = 0;
+	for (auto &n : homesCounts) h += n;
+	if (stackEmpty) return h;
+	const auto &card = state.stacks[0].storage().back();
+	for (const auto &fc : state.free_cells) {
+		if (fc.canAccept(card)) {
+			return h;
+		}
+	}
+	return h*2;
+}
+
+double NotAtFoundations(const GameState &state) {
+	double count = 0;
+	const auto &card = state.stacks[0].storage().back();
+	for (const auto &stack : state.stacks) {
+		count += stack.storage().size();
+	}
+	for (const auto &fc : state.free_cells) {
+		if (fc.canAccept(card)) count++;
+	}
+	return count;
+}
+
+double SumOfBottom(const GameState &state) {
+	double val = 100;
+	for (const auto &stack : state.stacks) {
+		auto storage = stack.storage();
+		if (!storage.empty()) {
+			val -= storage.back().value;
+		}
+	}
+	return val;
+}
+
+double DiffFromTop(const GameState &state) {
+	vector<double> cascades = {};
+	vector<double> foundation = {};
+	for (const auto &stack : state.stacks) {
+		auto storage = stack.storage();
+		if (!storage.empty()) {
+			cascades.push_back(storage.at(0).value);
+		}
+	}
+	for (const auto &home : state.homes) {
+		auto top = home.topCard();
+		if (top.has_value()) {
+			foundation.push_back(top.value().value);
+		}
+	}
+	double cascadesAvg = accumulate(cascades.begin(), cascades.end(), 0)/cascades.size();
+	double foundationAvg = accumulate(foundation.begin(), foundation.end(), 0)/foundation.size();
+	return cascadesAvg - foundationAvg;
+}
 
 std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_state) {
 	// variables
@@ -47,7 +122,6 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 		vector<SearchAction> currAct = actState->actions();
 		for (auto &gameMove : currAct) {
 			if ((getCurrentRSS() + 1000000) >= mem_limit_) {
-				cout << "error" << endl;
 				return {}; // memory check
 			}
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
@@ -67,8 +141,6 @@ std::vector<SearchAction> BreadthFirstSearch::solve(const SearchState &init_stat
 		for (auto &act : BFSopen.front().actions) {
 			finalActions.push_back(*act);
 		}
-		cout << "yay" << endl;
-		printf("BFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 		return finalActions;
 	}
 	return {};
@@ -98,7 +170,6 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 			vector<SearchAction> currAct = actState->actions();
 			for (auto &gameMove : currAct) {
 				if ((getCurrentRSS() + 1000000) >= mem_limit_) {
-					cout << "error" << endl;
 					return {}; // memory check
 				}
 				shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
@@ -121,15 +192,19 @@ std::vector<SearchAction> DepthFirstSearch::solve(const SearchState &init_state)
 		for (auto &act : DFSopen.back().actions) {
 			finalActions.push_back(*act);
 		}
-		cout << "yay" << endl;
-		printf("DFS: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 		return finalActions;
 	}
 	return {};
 }
 
 double StudentHeuristic::distanceLowerBound(const GameState &state) const {
-    return 0;
+	vector<double> heuristics = {};
+	heuristics.push_back(HSDH(state));
+	heuristics.push_back(NotAtFoundations(state));
+	// heuristics.push_back(DiffFromTop(state));
+	// heuristics.push_back(SumOfBottom(state));
+	// return *min_element(heuristics.begin(), heuristics.end());
+	return accumulate(heuristics.begin(), heuristics.end(), 0)/heuristics.size();
 }
 
 std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
@@ -156,8 +231,6 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 		vector<SearchAction> currAct = actState->actions();
 		for (auto &gameMove : currAct) {
 			if ((getCurrentRSS() + 1000000) >= mem_limit_) {
-				cout << "error" << endl;
-				printf("A_star: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 				return {}; // memory check
 			}
 			shared_ptr<SearchState> newStatePtr = make_shared<SearchState>(move(gameMove.execute(*actState)));
@@ -179,8 +252,6 @@ std::vector<SearchAction> AStarSearch::solve(const SearchState &init_state) {
 		for (auto &act : Apriority.top().actions) {
 			finalActions.push_back(*act);
 		}
-		cout << "yay" << endl;
-		printf("A_star: MemLimit %f%%    %lu / %lu\n", (double) getCurrentRSS() / mem_limit_ * 100, getCurrentRSS(), mem_limit_);
 		return finalActions;
 	}
 	return {};
